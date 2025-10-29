@@ -12,6 +12,11 @@
       background: rgba(20, 25, 45, 0.85); display: flex; align-items: center; justify-content: center;
       font-size: 1.4rem; font-weight: bold; color: #9cd3ff; border-bottom: 2px solid #224b8a;
     }
+    .turnout {
+      position: absolute; top: 70px; left: 10px; background: rgba(25,35,65,0.85);
+      padding: 10px 15px; border-radius: 8px; font-size: 1.1rem; color: #a4d8ff;
+      border: 1px solid #3465a4;
+    }
     .video-container {
       position: absolute; top: 60px; left: 0; right: 0; bottom: 120px;
       background: black; display: flex; align-items: center; justify-content: center;
@@ -36,6 +41,7 @@
 </head>
 <body>
   <header>🏫 실시간 개표 방송</header>
+  <div class="turnout" id="turnoutBox">투표율 계산 중...</div>
   <div class="video-container">
     <video id="broadcastVideo" autoplay muted loop></video>
   </div>
@@ -43,7 +49,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-    import { getFirestore, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, onSnapshot, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCLge3LmR3bCTb7gKnVMVh2s_xt7zpdQYg",
@@ -63,18 +69,21 @@
     ];
 
     const container = document.getElementById('results');
+    const turnoutBox = document.getElementById('turnoutBox');
 
     async function renderResults() {
       container.innerHTML = '';
+      let totalVotes = 0;
       for (const pos of positions) {
         const colRef = collection(db, `elections/2025/${pos.key}`);
         const snap = await getDocs(colRef);
         let candidates = [];
-        let totalVotes = 0;
+        let sectionVotes = 0;
         snap.forEach(docSnap => {
           const data = { id: docSnap.id, ...docSnap.data() };
           candidates.push(data);
           totalVotes += Number(data.votes || 0);
+          sectionVotes += Number(data.votes || 0);
         });
         candidates.sort((a,b) => b.votes - a.votes);
         candidates = candidates.slice(0,3);
@@ -84,7 +93,7 @@
         section.innerHTML = `<h3>${pos.label}</h3>`;
 
         candidates.forEach(c => {
-          const percent = totalVotes ? ((c.votes / totalVotes) * 100).toFixed(1) : 0;
+          const percent = sectionVotes ? ((c.votes / sectionVotes) * 100).toFixed(1) : 0;
           const div = document.createElement('div');
           div.className = 'candidate';
           div.innerHTML = `
@@ -96,20 +105,29 @@
         });
         container.appendChild(section);
       }
+      await updateTurnout(totalVotes);
+    }
+
+    async function updateTurnout(totalVotes) {
+      // Firestore의 'meta/turnout' 문서에서 totalVoters 읽기
+      const turnoutDoc = await getDoc(doc(db, 'elections/2025/meta'));
+      let totalVoters = turnoutDoc.exists() ? turnoutDoc.data().totalVoters || 0 : 0;
+      const percent = totalVoters ? ((totalVotes / totalVoters) * 100).toFixed(1) : 0;
+      turnoutBox.textContent = `🗳️ 전체 투표율: ${percent}% (${totalVotes}명 / ${totalVoters}명)`;
     }
 
     positions.forEach(pos => {
       onSnapshot(collection(db, `elections/2025/${pos.key}`), renderResults);
     });
 
-    // 영상 업로드 기능 (간단히 파일 선택 후 반복 재생)
+    // 영상 업로드 기능
     const video = document.getElementById('broadcastVideo');
     const uploadInput = document.createElement('input');
     uploadInput.type = 'file';
     uploadInput.accept = 'video/*';
     uploadInput.style.position = 'absolute';
     uploadInput.style.top = '70px';
-    uploadInput.style.left = '10px';
+    uploadInput.style.left = '200px';
     uploadInput.onchange = e => {
       const file = e.target.files[0];
       if (file) {
