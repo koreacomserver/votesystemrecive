@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>학교 선거 개표 방송 화면</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Pretendard', 'Segoe UI', sans-serif; }
+    body { margin: 0; background: #0b0d14; color: #f2f2f2; overflow: hidden; }
+    header {
+      position: absolute; top: 0; left: 0; width: 100%; height: 60px;
+      background: rgba(20, 25, 45, 0.85); display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; font-weight: bold; color: #9cd3ff; border-bottom: 2px solid #224b8a;
+    }
+    .video-container {
+      position: absolute; top: 60px; left: 0; right: 0; bottom: 120px;
+      background: black; display: flex; align-items: center; justify-content: center;
+    }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    .bottom-bar {
+      position: absolute; bottom: 0; left: 0; width: 100%; height: 120px;
+      background: rgba(15, 18, 30, 0.95); display: flex; align-items: center; justify-content: space-around;
+      border-top: 2px solid #224b8a;
+    }
+    .section {
+      background: #1a2238; border-radius: 10px; width: 30%; height: 100px; padding: 10px;
+      display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    .section h3 { margin: 0 0 5px 10px; color: #76b9ff; }
+    .candidate { display: flex; align-items: center; gap: 10px; margin: 4px 10px; width: 90%; }
+    .bar-bg { flex: 1; height: 8px; background: #333; border-radius: 4px; }
+    .bar-fill { height: 8px; border-radius: 4px; background: #3a6ff8; transition: width 0.3s ease; }
+    .percent { color: #9cd3ff; font-size: 0.9rem; width: 45px; text-align: right; }
+  </style>
+</head>
+<body>
+  <header>🏫 실시간 개표 방송</header>
+  <div class="video-container">
+    <video id="broadcastVideo" autoplay muted loop></video>
+  </div>
+  <div class="bottom-bar" id="results"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCLge3LmR3bCTb7gKnVMVh2s_xt7zpdQYg",
+      authDomain: "votesystemserver.firebaseapp.com",
+      projectId: "votesystemserver",
+      storageBucket: "votesystemserver.firebasestorage.app",
+      messagingSenderId: "1091638887745",
+      appId: "1:1091638887745:web:7a6f54b6900c04839fcdc0"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const positions = [
+      { key: "president", label: "회장" },
+      { key: "vp_3rd", label: "3학년 부회장" },
+      { key: "vp_2nd", label: "2학년 부회장" }
+    ];
+
+    const container = document.getElementById('results');
+
+    async function renderResults() {
+      container.innerHTML = '';
+      for (const pos of positions) {
+        const colRef = collection(db, `elections/2025/${pos.key}`);
+        const snap = await getDocs(colRef);
+        let candidates = [];
+        let totalVotes = 0;
+        snap.forEach(docSnap => {
+          const data = { id: docSnap.id, ...docSnap.data() };
+          candidates.push(data);
+          totalVotes += Number(data.votes || 0);
+        });
+        candidates.sort((a,b) => b.votes - a.votes);
+        candidates = candidates.slice(0,3);
+
+        const section = document.createElement('div');
+        section.className = 'section';
+        section.innerHTML = `<h3>${pos.label}</h3>`;
+
+        candidates.forEach(c => {
+          const percent = totalVotes ? ((c.votes / totalVotes) * 100).toFixed(1) : 0;
+          const div = document.createElement('div');
+          div.className = 'candidate';
+          div.innerHTML = `
+            <span>${c.name}</span>
+            <div class='bar-bg'><div class='bar-fill' style='width:${percent}%;'></div></div>
+            <span class='percent'>${percent}%</span>
+          `;
+          section.appendChild(div);
+        });
+        container.appendChild(section);
+      }
+    }
+
+    positions.forEach(pos => {
+      onSnapshot(collection(db, `elections/2025/${pos.key}`), renderResults);
+    });
+
+    // 영상 업로드 기능 (간단히 파일 선택 후 반복 재생)
+    const video = document.getElementById('broadcastVideo');
+    const uploadInput = document.createElement('input');
+    uploadInput.type = 'file';
+    uploadInput.accept = 'video/*';
+    uploadInput.style.position = 'absolute';
+    uploadInput.style.top = '70px';
+    uploadInput.style.left = '10px';
+    uploadInput.onchange = e => {
+      const file = e.target.files[0];
+      if (file) {
+        const url = URL.createObjectURL(file);
+        video.src = url;
+        video.loop = true;
+      }
+    };
+    document.body.appendChild(uploadInput);
+
+    renderResults();
+  </script>
+</body>
+</html>
