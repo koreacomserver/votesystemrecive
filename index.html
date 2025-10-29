@@ -1,144 +1,179 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>학교 선거 개표 방송 화면</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>학교 선거 개표 방송</title>
   <style>
     * { box-sizing: border-box; font-family: 'Pretendard', 'Segoe UI', sans-serif; }
-    body { margin: 0; background: #0b0d14; color: #f2f2f2; overflow: hidden; }
+    body { margin: 0; background: #0d1021; color: #fff; overflow: hidden; }
+
     header {
-      position: absolute; top: 0; left: 0; width: 100%; height: 60px;
-      background: rgba(20, 25, 45, 0.85); display: flex; align-items: center; justify-content: center;
-      font-size: 1.4rem; font-weight: bold; color: #9cd3ff; border-bottom: 2px solid #224b8a;
+      background: linear-gradient(90deg, #2a2f66, #1c1f3a);
+      padding: 10px 20px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 1.2rem; font-weight: bold;
+      border-bottom: 3px solid #3a52f8;
     }
-    .turnout {
-      position: absolute; top: 70px; left: 10px; background: rgba(25,35,65,0.85);
-      padding: 10px 15px; border-radius: 8px; font-size: 1.1rem; color: #a4d8ff;
-      border: 1px solid #3465a4;
+
+    main {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      height: calc(100vh - 60px);
     }
-    .video-container {
-      position: absolute; top: 60px; left: 0; right: 0; bottom: 120px;
-      background: black; display: flex; align-items: center; justify-content: center;
+
+    .sidebar {
+      background: #151832;
+      padding: 1rem;
+      display: flex; flex-direction: column; justify-content: space-around;
     }
+
+    .sidebar div {
+      background: #202456; padding: 1rem; border-radius: 10px;
+      text-align: center; font-weight: bold; font-size: 1.1rem;
+      border: 2px solid #4455cc;
+    }
+
+    .video-area {
+      position: relative;
+      background: black;
+      display: flex; align-items: center; justify-content: center;
+    }
+
     video { width: 100%; height: 100%; object-fit: cover; }
-    .bottom-bar {
-      position: absolute; bottom: 0; left: 0; width: 100%; height: 120px;
-      background: rgba(15, 18, 30, 0.95); display: flex; align-items: center; justify-content: space-around;
-      border-top: 2px solid #224b8a;
+
+    .overlay {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(20, 24, 60, 0.9);
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      padding: 15px 20px;
+      gap: 10px;
     }
-    .section {
-      background: #1a2238; border-radius: 10px; width: 30%; height: 100px; padding: 10px;
-      display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
-      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+
+    .card {
+      background: #161a3a;
+      border-radius: 10px;
+      padding: 10px 15px;
+      display: flex; flex-direction: column;
+      border: 2px solid #3a52f8;
     }
-    .section h3 { margin: 0 0 5px 10px; color: #76b9ff; }
-    .candidate { display: flex; align-items: center; gap: 10px; margin: 4px 10px; width: 90%; }
-    .bar-bg { flex: 1; height: 8px; background: #333; border-radius: 4px; }
-    .bar-fill { height: 8px; border-radius: 4px; background: #3a6ff8; transition: width 0.3s ease; }
-    .percent { color: #9cd3ff; font-size: 0.9rem; width: 45px; text-align: right; }
+
+    .card-header { font-size: 1.1rem; margin-bottom: 8px; font-weight: bold; color: #89a9ff; }
+
+    .candidate { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; }
+    .bar-bg { background: #202856; height: 10px; border-radius: 5px; overflow: hidden; width: 60%; }
+    .bar-fill { background: #4a6eff; height: 10px; transition: width 0.5s; }
+    .percent { font-weight: bold; width: 40px; text-align: right; }
+
+    .turnout-box {
+      position: absolute; top: 10px; left: 20px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px 20px; border-radius: 10px;
+      font-size: 1.1rem; border: 1px solid #3a52f8;
+    }
   </style>
 </head>
 <body>
-  <header>🏫 실시간 개표 방송</header>
-  <div class="turnout" id="turnoutBox">투표율 계산 중...</div>
-  <div class="video-container">
-    <video id="broadcastVideo" autoplay muted loop></video>
-  </div>
-  <div class="bottom-bar" id="results"></div>
+  <header>
+    <div>📊 2025 전교 선거 개표 방송</div>
+    <div id="clock"></div>
+  </header>
+
+  <main>
+    <div class="sidebar">
+      <div>회장</div>
+      <div>3학년 부회장</div>
+      <div>2학년 부회장</div>
+    </div>
+
+    <div class="video-area">
+      <video id="broadcastVideo" controls loop></video>
+      <input type="file" id="videoUpload" accept="video/*" style="position:absolute;top:10px;right:10px;z-index:2;" />
+
+      <div class="turnout-box">전체 투표율: <span id="turnout">0%</span></div>
+
+      <div class="overlay" id="results">
+        <!-- 후보 결과 카드 3개 들어감 -->
+      </div>
+    </div>
+  </main>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-    import { getFirestore, collection, getDocs, onSnapshot, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+    import { getFirestore, collection, onSnapshot, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCLge3LmR3bCTb7gKnVMVh2s_xt7zpdQYg",
       authDomain: "votesystemserver.firebaseapp.com",
       projectId: "votesystemserver",
-      storageBucket: "votesystemserver.firebasestorage.app",
-      messagingSenderId: "1091638887745",
-      appId: "1:1091638887745:web:7a6f54b6900c04839fcdc0"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+
     const positions = [
-      { key: "president", label: "회장" },
-      { key: "vp_3rd", label: "3학년 부회장" },
-      { key: "vp_2nd", label: "2학년 부회장" }
+      { key: 'president', label: '회장' },
+      { key: 'vp_3rd', label: '3학년 부회장' },
+      { key: 'vp_2nd', label: '2학년 부회장' }
     ];
 
-    const container = document.getElementById('results');
-    const turnoutBox = document.getElementById('turnoutBox');
-
-    async function renderResults() {
+    async function renderAll() {
+      const container = document.getElementById('results');
       container.innerHTML = '';
-      let totalVotes = 0;
+
       for (const pos of positions) {
-        const colRef = collection(db, `elections/2025/${pos.key}`);
-        const snap = await getDocs(colRef);
-        let candidates = [];
-        let sectionVotes = 0;
-        snap.forEach(docSnap => {
-          const data = { id: docSnap.id, ...docSnap.data() };
-          candidates.push(data);
-          totalVotes += Number(data.votes || 0);
-          sectionVotes += Number(data.votes || 0);
-        });
-        candidates.sort((a,b) => b.votes - a.votes);
-        candidates = candidates.slice(0,3);
+        const col = collection(db, `elections/2025/${pos.key}`);
+        onSnapshot(col, snap => {
+          const data = [];
+          snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+          data.sort((a, b) => b.votes - a.votes);
+          const top3 = data.slice(0, 3);
+          const total = data.reduce((sum, c) => sum + Number(c.votes || 0), 0);
 
-        const section = document.createElement('div');
-        section.className = 'section';
-        section.innerHTML = `<h3>${pos.label}</h3>`;
-
-        candidates.forEach(c => {
-          const percent = sectionVotes ? ((c.votes / sectionVotes) * 100).toFixed(1) : 0;
-          const div = document.createElement('div');
-          div.className = 'candidate';
-          div.innerHTML = `
-            <span>${c.name}</span>
-            <div class='bar-bg'><div class='bar-fill' style='width:${percent}%;'></div></div>
-            <span class='percent'>${percent}%</span>
-          `;
-          section.appendChild(div);
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `<div class='card-header'>${pos.label}</div>` +
+            top3.map(c => `
+              <div class='candidate'>
+                <span>${c.name}</span>
+                <div class='bar-bg'><div class='bar-fill' style='width:${(c.votes/total*100).toFixed(1)}%'></div></div>
+                <span class='percent'>${((c.votes/total)*100).toFixed(1)}%</span>
+              </div>
+            `).join('');
+          container.appendChild(card);
         });
-        container.appendChild(section);
       }
-      await updateTurnout(totalVotes);
     }
 
-    async function updateTurnout(totalVotes) {
-      // Firestore의 'meta/turnout' 문서에서 totalVoters 읽기
-      const turnoutDoc = await getDoc(doc(db, 'elections/2025/meta'));
-      let totalVoters = turnoutDoc.exists() ? turnoutDoc.data().totalVoters || 0 : 0;
-      const percent = totalVoters ? ((totalVotes / totalVoters) * 100).toFixed(1) : 0;
-      turnoutBox.textContent = `🗳️ 전체 투표율: ${percent}% (${totalVotes}명 / ${totalVoters}명)`;
+    async function loadTurnout() {
+      const meta = await getDoc(doc(db, 'elections/2025/meta'));
+      if (meta.exists()) {
+        const { totalVoters, voted } = meta.data();
+        const percent = totalVoters ? ((voted / totalVoters) * 100).toFixed(1) : 0;
+        document.getElementById('turnout').textContent = percent + '%';
+      }
     }
 
-    positions.forEach(pos => {
-      onSnapshot(collection(db, `elections/2025/${pos.key}`), renderResults);
-    });
+    renderAll();
+    loadTurnout();
+    setInterval(loadTurnout, 5000);
 
-    // 영상 업로드 기능
+    const videoInput = document.getElementById('videoUpload');
     const video = document.getElementById('broadcastVideo');
-    const uploadInput = document.createElement('input');
-    uploadInput.type = 'file';
-    uploadInput.accept = 'video/*';
-    uploadInput.style.position = 'absolute';
-    uploadInput.style.top = '70px';
-    uploadInput.style.left = '200px';
-    uploadInput.onchange = e => {
+    videoInput.addEventListener('change', e => {
       const file = e.target.files[0];
       if (file) {
-        const url = URL.createObjectURL(file);
-        video.src = url;
-        video.loop = true;
+        video.src = URL.createObjectURL(file);
+        video.play();
       }
-    };
-    document.body.appendChild(uploadInput);
+    });
 
-    renderResults();
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent = now.toLocaleTimeString('ko-KR');
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
   </script>
 </body>
 </html>
