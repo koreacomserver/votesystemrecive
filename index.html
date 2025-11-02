@@ -31,7 +31,11 @@
     .sidebar div {
       background: #202456; padding: 1rem; border-radius: 10px;
       text-align: center; font-weight: bold; font-size: 1.1rem;
-      border: 2px solid #4455cc;
+      border: 2px solid #4455cc; position: relative;
+    }
+
+    .sidebar .turnout {
+      font-size: 0.9rem; color: #b0b8ff; margin-top: 8px;
     }
 
     .video-area {
@@ -56,6 +60,7 @@
       padding: 10px 15px;
       display: flex; flex-direction: column;
       border: 2px solid #3a52f8;
+      position: relative;
     }
 
     .card-header { font-size: 1.1rem; margin-bottom: 8px; font-weight: bold; color: #89a9ff; }
@@ -65,11 +70,24 @@
     .bar-fill { background: #4a6eff; height: 10px; transition: width 0.5s; }
     .percent { font-weight: bold; width: 40px; text-align: right; }
 
-    .turnout-box {
-      position: absolute; top: 10px; left: 20px;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 10px 20px; border-radius: 10px;
-      font-size: 1.1rem; border: 1px solid #3a52f8;
+    .badge {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      color: #000;
+    }
+
+    .likely {
+      background: linear-gradient(90deg, #ffd84d, #ffed8a);
+    }
+
+    .confirmed {
+      background: linear-gradient(90deg, #ffcc33, #fff2a8, #ffe680);
+      color: #3b2f00;
     }
   </style>
 </head>
@@ -80,18 +98,15 @@
   </header>
 
   <main>
-    <div class="sidebar">
-      <div>회장</div>
-      <div>3학년 부회장</div>
-      <div>2학년 부회장</div>
+    <div class="sidebar" id="sidebar">
+      <div id="side-president">회장<div class="turnout" id="turnout-president">투표율: 0%</div></div>
+      <div id="side-vp_3rd">3학년 부회장<div class="turnout" id="turnout-vp_3rd">투표율: 0%</div></div>
+      <div id="side-vp_2nd">2학년 부회장<div class="turnout" id="turnout-vp_2nd">투표율: 0%</div></div>
     </div>
 
     <div class="video-area">
       <video id="broadcastVideo" controls loop></video>
       <input type="file" id="videoUpload" accept="video/*" style="position:absolute;top:10px;right:10px;z-index:2;" />
-
-      <div class="turnout-box">전체 투표율: <span id="turnout">0%</span></div>
-
       <div class="overlay" id="results"></div>
     </div>
   </main>
@@ -139,10 +154,8 @@
             ${top3.map(c => `
               <div class='candidate'>
                 <span>${c.name}</span>
-                <div class='bar-bg'>
-                  <div class='bar-fill' style='width:${(c.votes / total * 100).toFixed(1)}%'></div>
-                </div>
-                <span class='percent'>${((c.votes / total) * 100).toFixed(1)}%</span>
+                <div class='bar-bg'><div class='bar-fill' style='width:${(c.votes/total*100).toFixed(1)}%'></div></div>
+                <span class='percent'>${((c.votes/total)*100).toFixed(1)}%</span>
               </div>
             `).join('')}
           `;
@@ -155,7 +168,32 @@
       if (meta.exists()) {
         const { totalVoters, voted } = meta.data();
         const percent = totalVoters ? ((voted / totalVoters) * 100).toFixed(1) : 0;
-        document.getElementById('turnout').textContent = percent + '%';
+
+        // 각 포지션별 투표율 표시
+        positions.forEach(pos => {
+          const turnoutEl = document.getElementById(`turnout-${pos.key}`);
+          if (turnoutEl) turnoutEl.textContent = `투표율: ${percent}%`;
+        });
+
+        // 당선/유력 배지 처리
+        positions.forEach(pos => {
+          const cardEl = document.getElementById(`card-${pos.key}`);
+          if (!cardEl) return;
+          const existingBadge = cardEl.querySelector('.badge');
+          if (existingBadge) existingBadge.remove();
+
+          if (percent >= 98) {
+            const badge = document.createElement('div');
+            badge.className = 'badge confirmed';
+            badge.textContent = '당선';
+            cardEl.appendChild(badge);
+          } else if (percent >= 80) {
+            const badge = document.createElement('div');
+            badge.className = 'badge likely';
+            badge.textContent = '당선 유력';
+            cardEl.appendChild(badge);
+          }
+        });
       }
     }
 
