@@ -130,76 +130,97 @@
       { key: 'vp_2nd', label: '2학년 부회장' }
     ];
 
+    // 직책별 유권자 수를 실시간으로 저장할 맵 (Manager 앱과 동기화)
+    const voterCounts = {};
+
     async function renderAll() {
       const container = document.getElementById('results');
       container.innerHTML = '';
 
       for (const pos of positions) {
+        // 1. 카드 구조 생성
         const card = document.createElement('div');
         card.className = 'card';
         card.id = `card-${pos.key}`;
         container.appendChild(card);
 
+        // 2. 유권자 수 (meta 문서) 실시간 리스너 설정
+        const metaDocRef = doc(db, `elections/2025/${pos.key}/meta`);
+        onSnapshot(metaDocRef, (metaSnap) => {
+            if (metaSnap.exists()) {
+                // 유권자 수 업데이트
+                voterCounts[pos.key] = Number(metaSnap.data().totalVoters) || 0;
+            } else {
+                voterCounts[pos.key] = 0;
+            }
+        });
+
+        // 3. 후보자 득표수 (컬렉션) 실시간 리스너 설정
         const col = collection(db, `elections/2025/${pos.key}`);
         onSnapshot(col, snap => {
           const data = [];
-          snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+          snap.forEach(doc => {
+            // 🔥 수정된 부분: 문서 ID가 'meta'인 경우 후보자 목록에서 제외
+            if (doc.id === 'meta') { 
+              return; 
+            }
+            data.push({ id: doc.id, ...doc.data() });
+          });
+          
           data.sort((a, b) => b.votes - a.votes);
           const top3 = data.slice(0, 3);
-          const total = data.reduce((sum, c) => sum + Number(c.votes || 0), 0);
+          const totalVotesCast = data.reduce((sum, c) => sum + Number(c.votes || 0), 0);
+          
+          const totalVoters = voterCounts[pos.key] || 0;
+
+          // 투표율 계산 (Total Votes Cast / Total Registered Voters)
+          const turnoutPercent = totalVoters > 0 ? ((totalVotesCast / totalVoters) * 100).toFixed(1) : '0.0';
+
+          // 사이드바 투표율 업데이트
+          const turnoutEl = document.getElementById(`turnout-${pos.key}`);
+          if (turnoutEl) turnoutEl.textContent = `투표율: ${turnoutPercent}%`;
+
 
           const cardEl = document.getElementById(`card-${pos.key}`);
+          // 카드 내용 업데이트 (후보자 득표율)
           cardEl.innerHTML = `
             <div class='card-header'>${pos.label}</div>
-            ${top3.map(c => `
-              <div class='candidate'>
-                <span>${c.name}</span>
-                <div class='bar-bg'><div class='bar-fill' style='width:${(c.votes/total*100).toFixed(1)}%'></div></div>
-                <span class='percent'>${((c.votes/total)*100).toFixed(1)}%</span>
-              </div>
-            `).join('')}
+            ${top3.map(c => {
+              // 후보자 득표율 계산은 총 투표수를 기준으로 합니다.
+              const candidatePercent = totalVotesCast ? ((c.votes/totalVotesCast*100).toFixed(1)) : '0.0';
+              return `
+                <div class='candidate'>
+                  <span>${c.name}</span>
+                  <div class='bar-bg'><div class='bar-fill' style='width:${candidatePercent}%'></div></div>
+                  <span class='percent'>${candidatePercent}%</span>
+                </div>
+              `;
+            }).join('')}
           `;
-        });
-      }
-    }
 
-    async function loadTurnout() {
-      const meta = await getDoc(doc(db, 'elections/2025/meta'));
-      if (meta.exists()) {
-        const { totalVoters, voted } = meta.data();
-        const percent = totalVoters ? ((voted / totalVoters) * 100).toFixed(1) : 0;
-
-        // 각 포지션별 투표율 표시
-        positions.forEach(pos => {
-          const turnoutEl = document.getElementById(`turnout-${pos.key}`);
-          if (turnoutEl) turnoutEl.textContent = `투표율: ${percent}%`;
-        });
-
-        // 당선/유력 배지 처리
-        positions.forEach(pos => {
-          const cardEl = document.getElementById(`card-${pos.key}`);
-          if (!cardEl) return;
+          // 배지 업데이트 (투표 완료 상태)
           const existingBadge = cardEl.querySelector('.badge');
           if (existingBadge) existingBadge.remove();
 
-          if (percent >= 98) {
-            const badge = document.createElement('div');
-            badge.className = 'badge confirmed';
-            badge.textContent = '당선';
-            cardEl.appendChild(badge);
-          } else if (percent >= 80) {
-            const badge = document.createElement('div');
-            badge.className = 'badge likely';
-            badge.textContent = '당선 유력';
-            cardEl.appendChild(badge);
-          }
-        });
-      }
-    }
+          const turnoutNum = parseFloat(turnoutPercent);
 
-    renderAll();
-    loadTurnout();
-    setInterval(loadTurnout, 5000);
+          if (turnoutNum >= 98) {
+              const badge = document.createElement('div');
+              badge.className = 'badge confirmed';
+              badge.textContent = '당선 확정'; // 투표 완료가 98% 이상일 때 당선 확정으로 간주
+              cardEl.appendChild(badge);
+          } else if (turnoutNum >= 80) {
+              const badge = document.createElement('div');
+              badge.className = 'badge likely';
+              badge.textContent = '개표 완료 임박'; // 투표 완료가 80% 이상일 때
+              cardEl.appendChild(badge);
+          }
+        }); // end onSnapshot(col, ...)
+      } // end for loop
+    } // end renderAll
+
+    // 기존의 loadTurnout 및 setInterval 대신 renderAll 호출
+    renderAll(); 
 
     const videoInput = document.getElementById('videoUpload');
     const video = document.getElementById('broadcastVideo');
