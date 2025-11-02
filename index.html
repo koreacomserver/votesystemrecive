@@ -42,10 +42,50 @@
       position: relative;
       background: black;
       display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
     }
 
     video { width: 100%; height: 100%; object-fit: cover; }
 
+    /* 새로운 라이브 그래픽 스타일 */
+    #liveTallyOverlay {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: white;
+        text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+    }
+
+    .live-badge {
+        background: #e74c3c; /* Red */
+        padding: 5px 15px;
+        border-radius: 5px;
+        font-weight: 900;
+        font-size: 1.5rem;
+        animation: pulse 1.5s infinite;
+        border: 2px solid white;
+    }
+
+    @keyframes pulse {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+        70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+    }
+
+    #tallyTicker {
+        background: rgba(30, 40, 70, 0.8);
+        padding: 8px 20px;
+        border-radius: 5px;
+        font-size: 1.1rem;
+        font-weight: bold;
+        border-left: 5px solid #3a6ff8;
+        min-width: 300px;
+    }
+    /* 기존 오버레이 스타일 */
     .overlay {
       position: absolute; bottom: 0; left: 0; right: 0;
       background: rgba(20, 24, 60, 0.9);
@@ -107,6 +147,13 @@
     <div class="video-area">
       <video id="broadcastVideo" controls loop></video>
       <input type="file" id="videoUpload" accept="video/*" style="position:absolute;top:10px;right:10px;z-index:2;" />
+      
+      <!-- 새로운 라이브 티커 요소 -->
+      <div id="liveTallyOverlay">
+          <div class="live-badge">LIVE</div>
+          <div id="tallyTicker">개표 정보를 불러오는 중입니다...</div>
+      </div>
+      
       <div class="overlay" id="results"></div>
     </div>
   </main>
@@ -130,8 +177,10 @@
       { key: 'vp_2nd', label: '2학년 부회장' }
     ];
 
-    // 직책별 유권자 수를 실시간으로 저장할 맵 (Manager 앱과 동기화)
     const voterCounts = {};
+    // 라이브 티커에서 사용할 선두 후보 데이터 저장소
+    const leadingCandidates = {}; 
+    let currentTickerIndex = 0;
 
     async function renderAll() {
       const container = document.getElementById('results');
@@ -148,7 +197,6 @@
         const metaDocRef = doc(db, `elections/2025/${pos.key}/meta`);
         onSnapshot(metaDocRef, (metaSnap) => {
             if (metaSnap.exists()) {
-                // 유권자 수 업데이트
                 voterCounts[pos.key] = Number(metaSnap.data().totalVoters) || 0;
             } else {
                 voterCounts[pos.key] = 0;
@@ -160,7 +208,7 @@
         onSnapshot(col, snap => {
           const data = [];
           snap.forEach(doc => {
-            // 🔥 수정된 부분: 문서 ID가 'meta'인 경우 후보자 목록에서 제외
+            // 문서 ID가 'meta'인 경우 후보자 목록에서 제외
             if (doc.id === 'meta') { 
               return; 
             }
@@ -179,7 +227,21 @@
           // 사이드바 투표율 업데이트
           const turnoutEl = document.getElementById(`turnout-${pos.key}`);
           if (turnoutEl) turnoutEl.textContent = `투표율: ${turnoutPercent}%`;
-
+          
+          // 🔥 선두 후보 정보 저장 (티커 업데이트용)
+          if (top3.length > 0) {
+              const winner = top3[0];
+              const percent = totalVotesCast ? ((winner.votes / totalVotesCast) * 100).toFixed(1) : '0.0';
+              
+              leadingCandidates[pos.key] = {
+                  label: pos.label,
+                  name: winner.name,
+                  percent: percent,
+                  votes: winner.votes
+              };
+          } else {
+               leadingCandidates[pos.key] = null;
+          }
 
           const cardEl = document.getElementById(`card-${pos.key}`);
           // 카드 내용 업데이트 (후보자 득표율)
@@ -218,9 +280,32 @@
         }); // end onSnapshot(col, ...)
       } // end for loop
     } // end renderAll
+    
+    // 라이브 티커를 순환하며 업데이트하는 함수
+    function updateLiveTallyTicker() {
+        // 데이터가 있는 직책의 키만 필터링
+        const keys = positions.map(p => p.key).filter(k => leadingCandidates[k]);
+        
+        const tickerEl = document.getElementById('tallyTicker');
 
-    // 기존의 loadTurnout 및 setInterval 대신 renderAll 호출
+        if (keys.length === 0) {
+            tickerEl.textContent = "📢 개표 정보 업데이트 대기 중... (관리자 앱에서 후보자를 등록해 주세요.)";
+            return;
+        }
+
+        // 다음 직책으로 인덱스 이동
+        currentTickerIndex = (currentTickerIndex + 1) % keys.length;
+        const currentKey = keys[currentTickerIndex];
+        const leader = leadingCandidates[currentKey];
+
+        // 티커 내용 업데이트
+        tickerEl.textContent = `⚡️ ${leader.label} (선두: ${leader.name}) - 득표율 ${leader.percent}% / ${leader.votes}표`;
+    }
+
     renderAll(); 
+
+    // 3초마다 라이브 티커 업데이트 시작
+    setInterval(updateLiveTallyTicker, 3000); 
 
     const videoInput = document.getElementById('videoUpload');
     const video = document.getElementById('broadcastVideo');
