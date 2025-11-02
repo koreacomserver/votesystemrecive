@@ -80,6 +80,10 @@
   </header>
 
   <main>
+    <div class="sidebar">
+      <div>회장</div>
+      <div>3학년 부회장</div>
+      <div>2학년 부회장</div>
     </div>
 
     <div class="video-area">
@@ -88,9 +92,7 @@
 
       <div class="turnout-box">전체 투표율: <span id="turnout">0%</span></div>
 
-      <div class="overlay" id="results">
-        <!-- 후보 결과 카드 3개 들어감 -->
-      </div>
+      <div class="overlay" id="results"></div>
     </div>
   </main>
 
@@ -118,6 +120,11 @@
       container.innerHTML = '';
 
       for (const pos of positions) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.id = `card-${pos.key}`;
+        container.appendChild(card);
+
         const col = collection(db, `elections/2025/${pos.key}`);
         onSnapshot(col, snap => {
           const data = [];
@@ -126,17 +133,19 @@
           const top3 = data.slice(0, 3);
           const total = data.reduce((sum, c) => sum + Number(c.votes || 0), 0);
 
-          const card = document.createElement('div');
-          card.className = 'card';
-          card.innerHTML = `<div class='card-header'>${pos.label}</div>` +
-            top3.map(c => `
+          const cardEl = document.getElementById(`card-${pos.key}`);
+          cardEl.innerHTML = `
+            <div class='card-header'>${pos.label}</div>
+            ${top3.map(c => `
               <div class='candidate'>
                 <span>${c.name}</span>
-                <div class='bar-bg'><div class='bar-fill' style='width:${(c.votes/total*100).toFixed(1)}%'></div></div>
-                <span class='percent'>${((c.votes/total)*100).toFixed(1)}%</span>
+                <div class='bar-bg'>
+                  <div class='bar-fill' style='width:${(c.votes / total * 100).toFixed(1)}%'></div>
+                </div>
+                <span class='percent'>${((c.votes / total) * 100).toFixed(1)}%</span>
               </div>
-            `).join('');
-          container.appendChild(card);
+            `).join('')}
+          `;
         });
       }
     }
