@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>학교 선거 개표 방송</title>
   <style>
+    /* Pretendard 폰트 추가 */
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { box-sizing: border-box; font-family: 'Pretendard', 'Segoe UI', sans-serif; }
     body { margin: 0; background: #0d1021; color: #fff; overflow: hidden; }
 
@@ -43,6 +45,12 @@
       background: black;
       display: flex; align-items: center; justify-content: center;
       overflow: hidden;
+      border: 3px dashed transparent;
+      transition: border-color 0.3s;
+    }
+    
+    .video-area.drag-over {
+        border-color: #4a6eff;
     }
 
     canvas { 
@@ -50,11 +58,21 @@
         object-fit: cover; 
         display: block; 
         background: #000; 
-        position: absolute; /* 오버레이 요소들이 캔버스 위에 올 수 있도록 */
+        position: absolute; 
         top: 0; left: 0; 
+        z-index: 1; 
+    }
+    
+    #broadcastVideo {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        z-index: 2; 
+        display: none; 
     }
 
-    /* 새로운 라이브 그래픽 스타일 */
+    /* 라이브 오버레이 스타일 */
     #liveTallyOverlay {
         position: absolute;
         top: 20px;
@@ -68,7 +86,7 @@
     }
 
     .live-badge {
-        background: #e74c3c; /* Red */
+        background: #e74c3c; 
         padding: 5px 15px;
         border-radius: 5px;
         font-weight: 900;
@@ -92,13 +110,15 @@
         border-left: 5px solid #3a6ff8;
         min-width: 300px;
     }
-    /* 기존 오버레이 스타일 */
+    
+    /* 하단 카드 오버레이 스타일 */
     .overlay {
       position: absolute; bottom: 0; left: 0; right: 0;
       background: rgba(20, 24, 60, 0.9);
       display: grid; grid-template-columns: repeat(3, 1fr);
       padding: 15px 20px;
       gap: 10px;
+      z-index: 10;
     }
 
     .card {
@@ -112,29 +132,68 @@
 
     .card-header { font-size: 1.1rem; margin-bottom: 8px; font-weight: bold; color: #89a9ff; }
 
-    .candidate { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; }
-    .bar-bg { background: #202856; height: 10px; border-radius: 5px; overflow: hidden; width: 60%; }
-    .bar-fill { background: #4a6eff; height: 10px; transition: width 0.5s; }
-    .percent { font-weight: bold; width: 40px; text-align: right; }
-
-    .badge {
-      position: absolute;
-      top: 8px;
-      right: 10px;
-      padding: 3px 8px;
-      border-radius: 5px;
-      font-size: 0.8rem;
-      font-weight: bold;
-      color: #000;
+    /* 후보자 항목 */
+    .candidate { 
+        display: flex; 
+        flex-direction: column; /* 이름을 한 줄, 바/퍼센트를 다른 줄에 배치하기 위해 컬럼으로 변경 */
+        margin: 6px 0; 
+    }
+    
+    .candidate-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px; /* 이름과 바 사이 간격 */
+    }
+    
+    .candidate-name-group {
+        display: flex;
+        align-items: center;
+        font-weight: bold;
+        color: white;
     }
 
+    /* 🌟 후보자 이름 옆에 붙는 상태 배지 스타일 */
+    .candidate-status {
+      margin-left: 8px;
+      padding: 3px 6px;
+      border-radius: 5px;
+      font-size: 0.7rem;
+      font-weight: 900;
+      line-height: 1; /* 높이 조절 */
+      text-transform: uppercase;
+      transform: translateY(-1px);
+    }
+
+    /* 🌟 당선 확정 스타일 */
+    .confirmed {
+      background: linear-gradient(90deg, #ffcc33, #fff2a8);
+      color: #3b2f00;
+    }
+
+    /* 🌟 당선 임박 스타일 */
     .likely {
       background: linear-gradient(90deg, #ffd84d, #ffed8a);
+      color: #3b2f00;
     }
 
-    .confirmed {
-      background: linear-gradient(90deg, #ffcc33, #fff2a8, #ffe680);
-      color: #3b2f00;
+    .candidate-bar-area {
+        display: flex;
+        align-items: center;
+    }
+
+    .bar-bg { background: #202856; height: 10px; border-radius: 5px; overflow: hidden; width: 60%; }
+    .bar-fill { background: #4a6eff; height: 10px; transition: width 0.5s; }
+    .percent { font-weight: bold; width: 40%; text-align: right; color: #89a9ff; }
+
+
+    #dragDropText {
+        position: absolute;
+        color: rgba(255, 255, 255, 0.3);
+        font-size: 2rem;
+        font-weight: bold;
+        pointer-events: none; 
+        z-index: 10;
     }
   </style>
 </head>
@@ -151,10 +210,14 @@
       <div id="side-vp_2nd">2학년 부회장<div class="turnout" id="turnout-vp_2nd">투표율: 0%</div></div>
     </div>
 
-    <div class="video-area">
-      <!-- 🌟 비디오와 업로드 버튼 대신 캔버스 삽입 --><canvas id="broadcastCanvas"></canvas>
+    <div class="video-area" id="videoArea">
+      <div id="dragDropText">영상을 드래그하여 여기에 놓으세요</div>
+
+      <video id="broadcastVideo" controls></video>
       
-      <!-- 새로운 라이브 티커 요소 --><div id="liveTallyOverlay">
+      <canvas id="broadcastCanvas"></canvas>
+      
+      <div id="liveTallyOverlay">
           <div class="live-badge">LIVE</div>
           <div id="tallyTicker">개표 정보를 불러오는 중입니다...</div>
       </div>
@@ -165,11 +228,35 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+    import { getFirestore, collection, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 
-    // 🌟 Canvas Animation Logic (Start) - 실제 개표 방송 그래픽으로 변경
+    // --- Firebase 설정 ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyCLge3LmR3bCTb7gKnVMVh2s_xt7zpdQYg",
+      authDomain: "votesystemserver.firebaseapp.com",
+      projectId: "votesystemserver",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const positions = [
+      { key: 'president', label: '회장' },
+      { key: 'vp_3rd', label: '3학년 부회장' },
+      { key: 'vp_2nd', label: '2학년 부회장' }
+    ];
+
+    const voterCounts = {};
+    const leadingCandidates = {}; 
+    let currentTickerIndex = 0;
+
+    // --- Canvas 및 애니메이션 상태 ---
     const canvas = document.getElementById('broadcastCanvas');
     const ctx = canvas.getContext('2d');
+    const videoElement = document.getElementById('broadcastVideo');
+    const videoArea = document.getElementById('videoArea');
+    const dragDropText = document.getElementById('dragDropText');
+
     let width, height;
 
     function resizeCanvas() {
@@ -181,10 +268,13 @@
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // 임시로 애니메이션을 위한 후보자 데이터 저장
-    const animatedCandidateData = {}; // { positionKey: [{ name, votes: currentVotes, targetVotes, currentPercent, targetPercent }, ...] }
+    let broadcastState = 'LIVE';
+    let currentPositionIndex = 0; 
+    const rotationInterval = 3000; 
 
-    // 숫자 카운터 애니메이션 헬퍼 함수
+    const animatedCandidateData = {};
+
+    // 캔버스 애니메이션 헬퍼 함수
     function animateValue(obj, start, end, duration, propertyName) {
         let startTimestamp = null;
         const step = (timestamp) => {
@@ -203,14 +293,13 @@
         const step = (timestamp) => {
             if (!startTimestamp) startTimestamp = timestamp;
             const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-            obj[propertyName] = (progress * (end - start) + start); // 소수점 유지
+            obj[propertyName] = (progress * (end - start) + start); 
             if (progress < 1) {
                 window.requestAnimationFrame(step);
             }
         };
         window.requestAnimationFrame(step);
     }
-
 
     function drawBackgroundGrid() {
         ctx.fillStyle = '#0d1021';
@@ -234,7 +323,6 @@
         }
     }
 
-    // 데이터 흐름 효과 (작은 점들)
     let flowParticles = [];
     const MAX_FLOW_PARTICLES = 30;
 
@@ -281,104 +369,150 @@
     }
     initFlowParticles();
 
-
-    function drawMainElectionGraphic() {
-        const mainPositionKey = 'president'; // 회장 선거를 메인으로 표시
+    // LIVE 상태 (실시간 막대 그래프)
+    function drawLiveTally() {
+        const mainPositionKey = positions[currentPositionIndex].key; 
         const mainData = animatedCandidateData[mainPositionKey];
+        const positionLabel = positions[currentPositionIndex].label;
+
         if (!mainData || mainData.length === 0) {
             ctx.fillStyle = 'white';
             ctx.font = '24px Pretendard';
             ctx.textAlign = 'center';
-            ctx.fillText("회장 선거 데이터를 기다리는 중...", width / 2, height / 2);
+            ctx.fillText(`${positionLabel} 데이터를 기다리는 중...`, width / 2, height / 2);
             return;
         }
 
-        // 그래프 영역 설정
         const graphAreaX = width * 0.1;
         const graphAreaY = height * 0.2;
         const graphAreaWidth = width * 0.8;
-        const graphAreaHeight = height * 0.6;
         const barHeight = 60;
         const barSpacing = 20;
 
         ctx.font = '36px Pretendard';
         ctx.fillStyle = '#89a9ff';
         ctx.textAlign = 'left';
-        ctx.fillText(`${positions.find(p => p.key === mainPositionKey).label} 득표 현황`, graphAreaX, graphAreaY - 40);
+        ctx.fillText(`[${positionLabel}] 득표 현황`, graphAreaX, graphAreaY - 40);
 
         mainData.forEach((c, index) => {
             const y = graphAreaY + index * (barHeight + barSpacing);
             
-            // 막대 배경 (고정)
             ctx.fillStyle = 'rgba(32, 40, 86, 0.6)';
             ctx.fillRect(graphAreaX, y, graphAreaWidth, barHeight);
 
-            // 막대 채우기 (애니메이션)
             const currentBarWidth = graphAreaWidth * (c.currentPercent / 100);
-            ctx.fillStyle = '#4a6eff'; // 진한 파란색
+            ctx.fillStyle = '#4a6eff'; 
             ctx.fillRect(graphAreaX, y, currentBarWidth, barHeight);
 
-            // 후보자 이름
             ctx.fillStyle = 'white';
             ctx.font = 'bold 28px Pretendard';
             ctx.fillText(c.name, graphAreaX + 20, y + barHeight / 2 + 10);
 
-            // 득표율 (애니메이션)
             ctx.font = 'bold 32px Pretendard';
             ctx.textAlign = 'right';
             ctx.fillText(`${c.currentPercent.toFixed(1)}%`, graphAreaX + graphAreaWidth - 20, y + barHeight / 2 + 12);
 
-            // 득표수 (애니메이션)
             ctx.font = '22px Pretendard';
             ctx.fillStyle = '#ccc';
             ctx.fillText(`${c.currentVotes.toLocaleString()}표`, graphAreaX + graphAreaWidth - 20, y + barHeight / 2 + 40);
 
-            ctx.textAlign = 'left'; // 다음 텍스트를 위해 정렬 초기화
+            ctx.textAlign = 'left'; 
         });
     }
 
-
     function animateCanvas() {
-        drawBackgroundGrid();
-        flowParticles.forEach(p => { p.update(); p.draw(); }); // 데이터 흐름 효과
-        drawMainElectionGraphic(); // 메인 개표 현황 그래픽
+        if (broadcastState === 'LIVE') {
+            document.getElementById('liveTallyOverlay').style.display = 'flex';
+            document.getElementById('results').style.display = 'grid'; 
+            dragDropText.style.display = 'block';
+
+            drawBackgroundGrid();
+            flowParticles.forEach(p => { p.update(); p.draw(); }); 
+            drawLiveTally();
+        } else if (broadcastState === 'VIDEO') {
+            drawBackgroundGrid(); 
+        }
 
         requestAnimationFrame(animateCanvas);
     }
     animateCanvas();
-    // 🌟 Canvas Animation Logic (End)
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyCLge3LmR3bCTb7gKnVMVh2s_xt7zpdQYg",
-      authDomain: "votesystemserver.firebaseapp.com",
-      projectId: "votesystemserver",
+    // 3초마다 그래프 순환 시작
+    function startGraphRotation() {
+        setInterval(() => {
+            if (broadcastState === 'LIVE') {
+                currentPositionIndex = (currentPositionIndex + 1) % positions.length;
+            }
+        }, rotationInterval);
+    }
+    startGraphRotation();
+
+
+    // --- 드래그 앤 드롭 및 영상 재생 로직 ---
+
+    function setBroadcastMode(mode) {
+        broadcastState = mode;
+        if (mode === 'LIVE') {
+            videoElement.style.display = 'none';
+            canvas.style.display = 'block';
+            document.getElementById('results').style.display = 'grid'; 
+            document.getElementById('liveTallyOverlay').style.display = 'flex';
+            dragDropText.style.display = 'block';
+            videoElement.pause();
+            videoElement.src = '';
+            URL.revokeObjectURL(videoElement.src);
+        } else if (mode === 'VIDEO') {
+            canvas.style.display = 'none';
+            videoElement.style.display = 'block';
+            document.getElementById('results').style.display = 'none'; 
+            document.getElementById('liveTallyOverlay').style.display = 'none';
+            dragDropText.style.display = 'none';
+        }
+    }
+
+    videoArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        videoArea.classList.add('drag-over');
+    });
+
+    videoArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        videoArea.classList.remove('drag-over');
+    });
+
+    videoArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        videoArea.classList.remove('drag-over');
+
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('video/')) {
+            const videoURL = URL.createObjectURL(file);
+            videoElement.src = videoURL;
+            videoElement.play().catch(error => {
+                console.error("Video playback failed:", error);
+            });
+            
+            setBroadcastMode('VIDEO');
+        }
+    });
+
+    videoElement.onended = () => {
+        setBroadcastMode('LIVE'); 
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
 
-    const positions = [
-      { key: 'president', label: '회장' },
-      { key: 'vp_3rd', label: '3학년 부회장' },
-      { key: 'vp_2nd', label: '2학년 부회장' }
-    ];
-
-    const voterCounts = {};
-    const leadingCandidates = {}; 
-    let currentTickerIndex = 0;
+    // --- Firebase 데이터 로직 ---
 
     async function renderAll() {
       const container = document.getElementById('results');
       container.innerHTML = '';
 
       for (const pos of positions) {
-        // 1. 카드 구조 생성
         const card = document.createElement('div');
         card.className = 'card';
         card.id = `card-${pos.key}`;
         container.appendChild(card);
 
-        // 2. 유권자 수 (meta 문서) 실시간 리스너 설정
         const metaDocRef = doc(db, `elections/2025/${pos.key}/meta`);
         onSnapshot(metaDocRef, (metaSnap) => {
             if (metaSnap.exists()) {
@@ -388,12 +522,10 @@
             }
         });
 
-        // 3. 후보자 득표수 (컬렉션) 실시간 리스너 설정
         const col = collection(db, `elections/2025/${pos.key}`);
         onSnapshot(col, snap => {
           const data = [];
           snap.forEach(doc => {
-            // 문서 ID가 'meta'인 경우 후보자 목록에서 제외
             if (doc.id === 'meta') { 
               return; 
             }
@@ -406,103 +538,104 @@
           
           const totalVoters = voterCounts[pos.key] || 0;
 
-          // 투표율 계산 (Total Votes Cast / Total Registered Voters)
           const turnoutPercent = totalVoters > 0 ? ((totalVotesCast / totalVoters) * 100).toFixed(1) : '0.0';
 
-          // 사이드바 투표율 업데이트
           const turnoutEl = document.getElementById(`turnout-${pos.key}`);
           if (turnoutEl) turnoutEl.textContent = `투표율: ${turnoutPercent}%`;
           
-          // 선두 후보 정보 저장 (티커 업데이트용)
           if (top3.length > 0) {
-              const winner = top3[0];
-              const percent = totalVotesCast ? ((winner.votes / totalVotesCast) * 100).toFixed(1) : '0.0';
+              const winnerData = top3[0];
+              const percent = totalVotesCast ? ((winnerData.votes / totalVotesCast) * 100).toFixed(1) : '0.0';
               
               leadingCandidates[pos.key] = {
                   label: pos.label,
-                  name: winner.name,
+                  name: winnerData.name,
                   percent: percent,
-                  votes: winner.votes
+                  votes: winnerData.votes
               };
           } else {
                leadingCandidates[pos.key] = null;
           }
 
           const cardEl = document.getElementById(`card-${pos.key}`);
-          // 카드 내용 업데이트 (후보자 득표율)
+          
+          // 🌟 당선 확정 및 임박 상태 결정
+          const turnoutNum = parseFloat(turnoutPercent);
+          let candidateStatusBadge = '';
+          let topCandidateId = top3.length > 0 ? top3[0].id : null;
+          
+          // 득표 1위 후보자에게만 상태 배지 표시
+          if (turnoutNum >= 98 && topCandidateId) {
+              candidateStatusBadge = '<span data-candidate-id="' + topCandidateId + '" class="candidate-status confirmed">당선 확정</span>';
+          } else if (turnoutNum >= 80 && topCandidateId) {
+              candidateStatusBadge = '<span data-candidate-id="' + topCandidateId + '" class="candidate-status likely">당선 임박</span>';
+          }
+
+
+          // 🌟 카드 내용 업데이트 (후보자 득표율)
           cardEl.innerHTML = `
             <div class='card-header'>${pos.label}</div>
             ${top3.map(c => {
-              // 후보자 득표율 계산은 총 투표수를 기준으로 합니다.
               const candidatePercent = totalVotesCast ? ((c.votes/totalVotesCast*100).toFixed(1)) : '0.0';
+              
+              // 1위 후보자에게만 배지 HTML을 붙여줍니다.
+              const statusHtml = (c.id === topCandidateId) ? candidateStatusBadge : '';
+
               return `
                 <div class='candidate'>
-                  <span>${c.name}</span>
-                  <div class='bar-bg'><div class='bar-fill' style='width:${candidatePercent}%'></div></div>
-                  <span class='percent'>${candidatePercent}%</span>
+                    <div class='candidate-info'>
+                        <div class='candidate-name-group'>
+                            <span>${c.name}</span>
+                            ${statusHtml} 
+                        </div>
+                    </div>
+                    <div class='candidate-bar-area'>
+                        <div class='bar-bg'><div class='bar-fill' style='width:${candidatePercent}%'></div></div>
+                        <span class='percent'>${candidatePercent}%</span>
+                    </div>
                 </div>
               `;
             }).join('')}
           `;
 
-          // 배지 업데이트 (투표 완료 상태)
-          const existingBadge = cardEl.querySelector('.badge');
-          if (existingBadge) existingBadge.remove();
+          // 캔버스 애니메이션용 데이터 업데이트
+          const animationDuration = 800;
+          const currentAnimatedData = animatedCandidateData[pos.key] || [];
+          const newAnimatedData = [];
+          
+          data.forEach(c => {
+              const existing = currentAnimatedData.find(ac => ac.id === c.id);
+              const targetVotes = Number(c.votes || 0);
+              const targetPercent = totalVotesCast ? ((targetVotes / totalVotesCast) * 100) : 0;
 
-          const turnoutNum = parseFloat(turnoutPercent);
-
-          if (turnoutNum >= 98) {
-              const badge = document.createElement('div');
-              badge.className = 'badge confirmed';
-              badge.textContent = '당선 확정'; // 투표 완료가 98% 이상일 때 당선 확정으로 간주
-              cardEl.appendChild(badge);
-          } else if (turnoutNum >= 80) {
-              const badge = document.createElement('div');
-              badge.className = 'badge likely';
-              badge.textContent = '개표 완료 임박'; // 투표 완료가 80% 이상일 때
-              cardEl.appendChild(badge);
-          }
-
-          // 🌟 캔버스 애니메이션용 데이터 업데이트
-          if (pos.key === 'president') { // 메인 화면은 '회장' 직책으로 고정
-              const currentAnimatedData = animatedCandidateData[pos.key] || [];
-              const newAnimatedData = [];
-              const animationDuration = 800; // 0.8초 애니메이션
-
-              data.forEach(c => {
-                  const existing = currentAnimatedData.find(ac => ac.id === c.id);
-                  const targetVotes = Number(c.votes || 0);
-                  const targetPercent = totalVotesCast ? ((targetVotes / totalVotesCast) * 100) : 0;
-
-                  if (existing) {
-                      // 기존 데이터가 있으면 애니메이션 업데이트
-                      animateValue(existing, existing.currentVotes, targetVotes, animationDuration, 'currentVotes');
-                      animatePercent(existing, existing.currentPercent, targetPercent, animationDuration, 'currentPercent');
-                      newAnimatedData.push(existing);
-                  } else {
-                      // 없으면 새로 추가 (초기값은 0에서 시작)
-                      const newCand = { 
-                          id: c.id, 
-                          name: c.name, 
-                          currentVotes: 0, 
-                          targetVotes: targetVotes,
-                          currentPercent: 0,
-                          targetPercent: targetPercent
-                      };
-                      animateValue(newCand, 0, targetVotes, animationDuration, 'currentVotes');
-                      animatePercent(newCand, 0, targetPercent, animationDuration, 'currentPercent');
-                      newAnimatedData.push(newCand);
-                  }
-              });
-              animatedCandidateData[pos.key] = newAnimatedData;
-          }
-        }); // end onSnapshot(col, ...)
-      } // end for loop
-    } // end renderAll
+              if (existing) {
+                  animateValue(existing, existing.currentVotes, targetVotes, animationDuration, 'currentVotes');
+                  animatePercent(existing, existing.currentPercent, targetPercent, animationDuration, 'currentPercent');
+                  newAnimatedData.push(existing);
+              } else {
+                  const newCand = { 
+                      id: c.id, 
+                      name: c.name, 
+                      currentVotes: 0, 
+                      targetVotes: targetVotes,
+                      currentPercent: 0,
+                      targetPercent: targetPercent
+                  };
+                  animateValue(newCand, 0, targetVotes, animationDuration, 'currentVotes');
+                  animatePercent(newCand, 0, targetPercent, animationDuration, 'currentPercent');
+                  newAnimatedData.push(newCand);
+              }
+          });
+          animatedCandidateData[pos.key] = newAnimatedData;
+          
+        });
+      }
+    } 
     
     // 라이브 티커를 순환하며 업데이트하는 함수
     function updateLiveTallyTicker() {
-        // 데이터가 있는 직책의 키만 필터링
+        if (broadcastState === 'VIDEO') return;
+
         const keys = positions.map(p => p.key).filter(k => leadingCandidates[k]);
         
         const tickerEl = document.getElementById('tallyTicker');
@@ -512,12 +645,10 @@
             return;
         }
 
-        // 다음 직책으로 인덱스 이동
         currentTickerIndex = (currentTickerIndex + 1) % keys.length;
         const currentKey = keys[currentTickerIndex];
         const leader = leadingCandidates[currentKey];
 
-        // 티커 내용 업데이트
         tickerEl.textContent = `⚡️ ${leader.label} (선두: ${leader.name}) - 득표율 ${leader.percent}% / ${leader.votes}표`;
     }
 
